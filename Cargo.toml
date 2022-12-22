@@ -7,10 +7,14 @@ edition = "2021"
 [workspace]
 members = [
   "ljx",
+  "mylogger",
   ]
 
 [workspace.dependencies]
 anyhow = "1.0"
+log = "0.4"
 
 [dependencies]
 ljx = { path = "./ljx" }
+mylogger = { path = "./mylogger" }
+log = { workspace = true }

@@ -1,11 +1,13 @@
 #![allow(dead_code)]
 #![allow(non_snake_case)]
 use std::sync::mpsc;
+use log::{info,trace,warn,error};
 
 mod ffi;
 mod types;
 
 pub use types::*;
+
 
 #[no_mangle]
 extern "C" fn send_data(
@@ -37,20 +39,24 @@ extern "C" fn send_data(
 
 
 pub struct LjxIf {
+    // create()で操作
+    is_initialized: bool,
     sender:Box<mpsc::Sender<ReceiveData>>,
     callback_fn:ffi::HighSpeedDataCommunicationCallback,
 
-    is_initialized: bool,
+    // open_eathernet()で操作
     is_eathernet_open:bool,
+    ip_config:Option<ffi::LJX8IF_ETHERNET_CONFIG>,
+
     is_initialized_communication:bool,
     is_pre_start_communication:bool,
     is_communicating:bool,
-    // 定数
+
+    // 定数、create()で設定
     device_id:i32,//現状デバイスを複数つなぐことを考えていないので0
     profile_batch_size:u32,
     thread_id:u32,
 
-    ip_config:Option<ffi::LJX8IF_ETHERNET_CONFIG>,
     high_speed_port:Option<u16>,
 
 }
@@ -68,11 +74,16 @@ impl LjxIf {
         let mut sender = Box::new(tx);
         let cb = unsafe{ ffi::make_bridge_callback(&mut *sender, send_data)};
 
+        info!("info");
+        warn!("warn");
+        trace!("trace");
+        error!("error");
+        println!("ssss");
+
         Ok((Self {
+            is_initialized: true,
             sender:sender,
             callback_fn:cb,
-
-            is_initialized: true,
             is_eathernet_open:false,
             is_initialized_communication:false,
             is_pre_start_communication:false,
