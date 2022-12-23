@@ -39,15 +39,16 @@ extern "C" fn send_data(
 
 
 pub struct LjxIf {
-    // create()で操作
+    // create()で設定
     is_initialized: bool,
     sender:Box<mpsc::Sender<ReceiveData>>,
     callback_fn:ffi::HighSpeedDataCommunicationCallback,
 
-    // open_eathernet()で操作
-    is_eathernet_open:bool,
+    // open_ethernet()で操作
+    is_ethernet_open:bool,
     ip_config:Option<ffi::LJX8IF_ETHERNET_CONFIG>,
 
+    // initialize_communication()で設定
     is_initialized_communication:bool,
     is_pre_start_communication:bool,
     is_communicating:bool,
@@ -56,7 +57,6 @@ pub struct LjxIf {
     device_id:i32,//現状デバイスを複数つなぐことを考えていないので0
     profile_batch_size:u32,
     thread_id:u32,
-
     high_speed_port:Option<u16>,
 
 }
@@ -74,17 +74,12 @@ impl LjxIf {
         let mut sender = Box::new(tx);
         let cb = unsafe{ ffi::make_bridge_callback(&mut *sender, send_data)};
 
-        info!("info");
-        warn!("warn");
-        trace!("trace");
-        error!("error");
-        println!("ssss");
-
+        info!("create LjxIF");
         Ok((Self {
             is_initialized: true,
             sender:sender,
             callback_fn:cb,
-            is_eathernet_open:false,
+            is_ethernet_open:false,
             is_initialized_communication:false,
             is_pre_start_communication:false,
             is_communicating:false,
@@ -111,7 +106,7 @@ impl LjxIf {
 
     }
 
-    pub fn open_eathernet(&mut self, ip_address: [u8;4],port:u16) -> anyhow::Result<()>{
+    pub fn open_ethernet(&mut self, ip_address: [u8;4],port:u16) -> anyhow::Result<()>{
         let mut ip_config = ffi::LJX8IF_ETHERNET_CONFIG{
             abyIpAddress: ip_address,
             wPortNo: port,
@@ -124,15 +119,15 @@ impl LjxIf {
                 Err(err) => return Err(anyhow::anyhow!("Error when ffi::LJX8IF_EthernetOpen:{:?}",err)),
             }
         };
-
-        self.is_eathernet_open = true;
+        info!("open eathenet");
+        self.is_ethernet_open = true;
         self.ip_config = Some(ip_config);
         Ok(())
     }
 
     pub fn initialize_communication(&mut self,high_speed_port:u16) -> anyhow::Result<()>{
-        if !self.is_eathernet_open {
-            return Err(anyhow::anyhow!("Error not eathernet open when initialize_communication"))
+        if !self.is_ethernet_open {
+            return Err(anyhow::anyhow!("Error not ethernet open when initialize_communication"))
         }
         unsafe {
             let receive_code = ffi::LJX8IF_InitializeHighSpeedDataCommunication(
@@ -148,6 +143,7 @@ impl LjxIf {
                 Err(err) => return Err(anyhow::anyhow!("Error when ffi::LJX8IF_InitializeHighSpeedDataCommunication:{:?}",err)),
             }
         }
+        info!("initialize high speed communication");
         self.is_initialized_communication = true;
         Ok(())
     }
@@ -160,10 +156,10 @@ impl LjxIf {
 
         let mut profile_info = ffi::LJX8IF_PROFILE_INFO::new();
         let mut start_request = ffi::LJX8IF_HIGH_SPEED_PRE_START_REQ{
-            bySendPosition: 0,
+            bySendPosition: 2,
             // 0：前回送信完了位置から（初回であれば最古データから）、
-            // 1：最古デー タから（取り直し）、
-            // 2：次のデータから
+            // 1：最古データから（取り直し）、
+            // 2：次のデータから ⇒ コントローラーに溜まっているデータは破棄される？
             reserve: [0,0,0],
         };
 
@@ -175,9 +171,9 @@ impl LjxIf {
                 Err(err) => return Err(anyhow::anyhow!("Error when ffi::LJX8IF_PreStartHighSpeedDataCommunication:{:?}",err)),
             }
 
-            println!("Success LJX8IF_PreStartHighSpeedDataCommunication");
-            println!("profile_info: {:?}",profile_info);
+            info!("profile_info: {:?}",profile_info);
         }
+        info!("pre started high speed communication");
         
         self.is_pre_start_communication = true;
         Ok(())
@@ -200,6 +196,7 @@ impl LjxIf {
         }
         
         self.is_communicating = true;
+        info!("start high speed communication");
         Ok(())
     }
 
@@ -216,6 +213,7 @@ impl LjxIf {
             }
         }
         
+        info!("stop high speed communication");
         self.is_communicating = true;
         Ok(())
     }
@@ -224,7 +222,7 @@ impl LjxIf {
 
 impl Drop for LjxIf {
     fn drop(&mut self){
-        println!("destruct from drop"); 
+        info!("LjxFf destruct from drop"); 
 
         // if self.is_pre_start_communication{
         //     // 特に必要な処理はない
@@ -232,15 +230,18 @@ impl Drop for LjxIf {
 
         if self.is_initialized_communication {
             unsafe{ ffi::LJX8IF_FinalizeHighSpeedDataCommunication(self.device_id)};
+            info!("Communication finalized"); 
+
         }
 
-        if self.is_eathernet_open {
+        if self.is_ethernet_open {
             unsafe{ ffi::LJX8IF_CommunicationClose(self.device_id)};
+            info!("Ethernet finalized");
         };
 
         if self.is_initialized {
             unsafe { ffi::LJX8IF_Finalize() };
-            println!("DLL finalized"); 
+            info!("DLL finalized"); 
         };
     }
 }

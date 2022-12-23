@@ -18,3 +18,5 @@ log = "0.4"
 ljx = { path = "./ljx" }
 mylogger = { path = "./mylogger" }
 log = { workspace = true }
+anyhow = { workspace = true }
+nom = "7.1.1"
