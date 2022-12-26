@@ -20,3 +20,5 @@ mylogger = { path = "./mylogger" }
 log = { workspace = true }
 anyhow = { workspace = true }
 nom = "7.1.1"
+bytes = "1.3.0"
+rand = "0.6"

@@ -1,4 +1,0 @@
-struct CsvWriter{
-    path: String
-}
-

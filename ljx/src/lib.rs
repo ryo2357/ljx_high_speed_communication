@@ -24,7 +24,7 @@ extern "C" fn send_data(
 ) {
     // TODO:時間計測用のロガー設置
     // println!("I'm called from C with value");
-    let receive_slice = unsafe { std::slice::from_raw_parts(pBuffer, (dwSize*dwCount).try_into().unwrap()) }; 
+    let receive_slice = unsafe { std::slice::from_raw_parts(pBuffer, (dwSize*dwCount).try_into().unwrap()) };
     let vec = receive_slice.to_vec();
     let data  = ReceiveData{
         data:vec,
