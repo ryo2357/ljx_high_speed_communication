@@ -2,10 +2,11 @@
 mod lib;
 use lib::dummy::make_dummy;
 fn main(){
-    let mut vec= make_dummy();
+    let mut vec= make_dummy(5,3);
 
     
     println!("{:?}",vec.len() );
+    println!("{:?}",vec);
 }
 
 // fn make_dummy_data() -> Vec<u8>{

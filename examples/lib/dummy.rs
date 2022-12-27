@@ -1,11 +1,11 @@
 use rand::Rng;
 
-pub fn make_dummy() -> Vec<u8>{
+pub fn make_dummy(num_profile:usize,num_data:usize) -> Vec<u8>{
     let mut vec:Vec<u8> = Vec::new();
 
-    for _ in 0..5 {
+    for _ in 0..num_profile {
         let mut header:Vec<u8> = make_header();
-        let mut data:Vec<u8> = make_data();
+        let mut data:Vec<u8> = make_data(num_data);
         let mut footer:Vec<u8> = make_footer();
 
         vec.append(&mut header);
@@ -44,11 +44,11 @@ fn make_footer() -> Vec<u8>{
     return vec
 }
 
-fn make_data()-> Vec<u8>{
+fn make_data(num_data:usize)-> Vec<u8>{
     let mut vec:Vec<u8> = Vec::new();
     let mut rng = rand::thread_rng();
 
-    for _ in 0..3200 {
+    for _ in 0..num_data {
         let i: i32 = rng.gen();
         let i = i.to_be().to_le_bytes();
         vec.push(i[0]);
