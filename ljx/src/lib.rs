@@ -21,9 +21,7 @@ extern "C" fn send_data(
     dwNotify: ffi::DWORD,
     // スレッドID = dwThreadId
     dwUser: ffi::DWORD,
-) {
-    // TODO:時間計測用のロガー設置
-    // println!("I'm called from C with value");
+) {;
     let receive_slice = unsafe { std::slice::from_raw_parts(pBuffer, (dwSize*dwCount).try_into().unwrap()) };
     let vec = receive_slice.to_vec();
     let data  = ReceiveData{
@@ -32,6 +30,7 @@ extern "C" fn send_data(
         notify:dwNotify,
         user:dwUser
     };
+    info!("send data from ljx dwCount:{},dwNotify:{}",dwCount,dwNotify);
     unsafe {
         (*target).send(data).unwrap();
     }
@@ -142,8 +141,9 @@ impl LjxIf {
                 Ok(_) => {},
                 Err(err) => return Err(anyhow::anyhow!("Error when ffi::LJX8IF_InitializeHighSpeedDataCommunication:{:?}",err)),
             }
+            // TODO:receive_codeの確認
+            info!("initialize high speed communication. receive_code: {:?}",receive_code);
         }
-        info!("initialize high speed communication");
         self.is_initialized_communication = true;
         Ok(())
     }
@@ -172,6 +172,8 @@ impl LjxIf {
             }
 
             info!("profile_info: {:?}",profile_info);
+            // TODO:どのようなプロファイルが返ってくるかテスト
+            // 入力値とコントローラー内に保存されているデータの関係
         }
         info!("pre started high speed communication");
         
@@ -214,7 +216,7 @@ impl LjxIf {
         }
         
         info!("stop high speed communication");
-        self.is_communicating = true;
+        self.is_communicating = false;
         Ok(())
     }
     
@@ -227,6 +229,9 @@ impl Drop for LjxIf {
         // if self.is_pre_start_communication{
         //     // 特に必要な処理はない
         // }
+        if self.is_communicating {
+            self.stop_communication().unwrap();
+        }
 
         if self.is_initialized_communication {
             unsafe{ ffi::LJX8IF_FinalizeHighSpeedDataCommunication(self.device_id)};

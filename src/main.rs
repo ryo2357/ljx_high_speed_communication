@@ -1,7 +1,9 @@
 
 use std::thread;
 use std::sync::mpsc;
-use std::io::Write;
+
+use std::fs::File;
+use std::io::{Write,BufWriter};
 
 use ljx::{LjxIf,ReceiveData};
 use log::{info};
@@ -13,10 +15,52 @@ fn wait_until_enter(){
     std::io::stdin().read_line(&mut input).unwrap();
 }
 
-fn data_receive_loop(rx: mpsc::Receiver<ReceiveData>){
-    loop {
-        let vec = rx.recv().unwrap();
+struct DataWriter {
+    writer:BufWriter<File>,
+    data_num:usize,
+    data_end:usize
+}
 
+impl DataWriter {
+    fn create(path:String,data_num:usize) -> anyhow::Result<Self>{
+        let file = File::create(&path)?;
+        let writer = BufWriter::new(file);
+        
+        let data_end = 24+4*data_num;
+
+        Ok(Self{
+            writer: writer,
+            data_num: data_num,
+            data_end: data_end,
+        })
+    }
+
+    fn push_profile(&mut self,profile:&[u8] ){
+        let header = &profile[0..16];
+        self.writer.write(header);
+        let data = &profile[24..self.data_end];
+        self.writer.write(data);
+    }
+
+    fn push_data(&mut self,data:Vec<u8>){
+        for profile in data.chunks(4*(self.data_num+7)) {
+            self.push_profile(profile);
+        }
+    }
+}
+
+fn data_receive_loop(rx: mpsc::Receiver<ReceiveData>){
+
+    let date = mylogger::get_time_string();
+    let path = "output/data_".to_string() + &date + ".hex";
+    let mut data_writer = DataWriter::create(path,3200).unwrap();
+
+
+    loop {
+        let receive_data = rx.recv().unwrap();
+        // TODO:dwNotifyの値によってフローを変更する必要があるか？
+        data_writer.push_data(receive_data.data);
+        info!("received {} data written",receive_data.count);
     }
 }
 
@@ -24,7 +68,7 @@ fn main() {
     mylogger::init();
     info!("logger initialized");
 
-    let (mut interface, mut rx) = match LjxIf::create(){
+    let (mut interface, rx) = match LjxIf::create(){
         Ok(t) => t,
         Err(err) => panic!("Error when ffi::LJX8IF_InitializeHighSpeedDataCommunication:{:?}",err),
     };
@@ -42,28 +86,28 @@ fn main() {
     wait_until_enter();
     // ここでプロファイルデータを取得
     match interface.initialize_communication(4000){
-        Ok(t) => {},
+        Ok(_) => {},
         Err(err) => panic!("{:?}",err),
     }
 
     wait_until_enter();
 
     match interface.pre_start_communication(){
-        Ok(t) => {},
+        Ok(_) => {},
         Err(err) => panic!("{:?}",err),
     }
 
     wait_until_enter();
 
     match interface.start_communication(){
-        Ok(t) => {},
+        Ok(_) => {},
         Err(err) => panic!("{:?}",err),
     }
 
     wait_until_enter();
 
     match interface.stop_communication(){
-        Ok(t) => {},
+        Ok(_) => {},
         Err(err) => panic!("{:?}",err),
 
     }

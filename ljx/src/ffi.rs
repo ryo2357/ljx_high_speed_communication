@@ -24,13 +24,13 @@ extern "C" {
     pub(crate) fn LJX8IF_Finalize()-> LONG;
     pub(crate) fn LJX8IF_GetVersion() -> LJX8IF_VERSION_INFO;
     
-    // Eathernet通信開始
+    // Ethernet通信開始
     // LONG LJX8IF_EthernetOpen(LONG lDeviceId, LJX8IF_ETHERNET_CONFIG* pEthernetConfig);
     pub(crate) fn LJX8IF_EthernetOpen(
         lDeviceId:LONG,
         pEthernetConfig: *mut LJX8IF_ETHERNET_CONFIG
     )->LONG;
-    // Eathernet通信切断
+    // Ethernet通信切断
     // LONG LJX8IF_CommunicationClose(LONG lDeviceId);
     pub(crate) fn LJX8IF_CommunicationClose(
         lDeviceId:LONG,

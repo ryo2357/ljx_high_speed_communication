@@ -18,6 +18,11 @@ pub fn init() {
     setup_logger();
 }
 
+pub fn get_time_string()-> String{
+    let now: DateTime<Local> = Local::now();
+    now.format("%Y-%m-%d_%H%M%S").to_string()
+}
+
 fn setup_panic() {
     panic::set_hook(Box::new(move |panic_info: &PanicInfo<'_>| {
         let details = format!("{}", panic_info);
