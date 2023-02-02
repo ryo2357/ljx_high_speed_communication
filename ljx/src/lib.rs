@@ -21,7 +21,7 @@ extern "C" fn send_data(
     dwNotify: ffi::DWORD,
     // スレッドID = dwThreadId
     dwUser: ffi::DWORD,
-) {;
+) {
     let receive_slice = unsafe { std::slice::from_raw_parts(pBuffer, (dwSize*dwCount).try_into().unwrap()) };
     let vec = receive_slice.to_vec();
     let data  = ReceiveData{
@@ -83,7 +83,7 @@ impl LjxIf {
             is_pre_start_communication:false,
             is_communicating:false,
             device_id:0,
-            profile_batch_size:20,
+            profile_batch_size:8000,
             thread_id:0,
             ip_config:None,
             high_speed_port:None,
@@ -224,7 +224,8 @@ impl LjxIf {
 
 impl Drop for LjxIf {
     fn drop(&mut self){
-        info!("LjxFf destruct from drop"); 
+        // info!("LjxFf destruct from drop");
+        info!("LjxFfのDropよる終了処理");
 
         // if self.is_pre_start_communication{
         //     // 特に必要な処理はない

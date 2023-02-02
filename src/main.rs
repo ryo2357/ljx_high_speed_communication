@@ -1,6 +1,9 @@
-
+//  高速データ通信、バッチ測定
 use std::thread;
 use std::sync::mpsc;
+
+use std::time::Duration;
+use std::thread::sleep;
 
 use std::fs::File;
 use std::io::{Write,BufWriter};
@@ -37,9 +40,9 @@ impl DataWriter {
 
     fn push_profile(&mut self,profile:&[u8] ){
         let header = &profile[0..16];
-        self.writer.write(header);
+        self.writer.write(header).unwrap();
         let data = &profile[24..self.data_end];
-        self.writer.write(data);
+        self.writer.write(data).unwrap();
     }
 
     fn push_data(&mut self,data:Vec<u8>){
@@ -67,6 +70,8 @@ fn data_receive_loop(rx: mpsc::Receiver<ReceiveData>){
 fn main() {
     mylogger::init();
     info!("logger initialized");
+    
+    info!("Rustでの通信検証");
 
     let (mut interface, rx) = match LjxIf::create(){
         Ok(t) => t,
@@ -78,14 +83,14 @@ fn main() {
     
     wait_until_enter();
 
-    match interface.open_ethernet([192,168,0,1], 3000) {
-        Ok(t) => {},
+    match interface.open_ethernet([192,168,0,1], 24691) {
+        Ok(_t) => {},
         Err(err) => panic!("{:?}",err),
     }
 
     wait_until_enter();
     // ここでプロファイルデータを取得
-    match interface.initialize_communication(4000){
+    match interface.initialize_communication(24692){
         Ok(_) => {},
         Err(err) => panic!("{:?}",err),
     }
@@ -97,14 +102,16 @@ fn main() {
         Err(err) => panic!("{:?}",err),
     }
 
-    wait_until_enter();
+    // wait_until_enter();
 
     match interface.start_communication(){
         Ok(_) => {},
         Err(err) => panic!("{:?}",err),
     }
 
-    wait_until_enter();
+    // wait_until_enter();
+    sleep(Duration::from_millis(5000));
+
 
     match interface.stop_communication(){
         Ok(_) => {},
