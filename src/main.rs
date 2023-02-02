@@ -25,11 +25,18 @@ struct DataWriter {
 }
 
 impl DataWriter {
-    fn create(path:String,data_num:usize) -> anyhow::Result<Self>{
+    fn create(
+        path:String,
+        data_num:usize,
+        brightness:bool
+    ) -> anyhow::Result<Self>{
         let file = File::create(&path)?;
         let writer = BufWriter::new(file);
         
-        let data_end = 24+4*data_num;
+        let data_end = match brightness {
+            false => 24+4*data_num,
+            true => 24+8*data_num,
+        };
 
         Ok(Self{
             writer: writer,
@@ -56,7 +63,8 @@ fn data_receive_loop(rx: mpsc::Receiver<ReceiveData>){
 
     let date = mylogger::get_time_string();
     let path = "output/data_".to_string() + &date + ".hex";
-    let mut data_writer = DataWriter::create(path,3200).unwrap();
+    let fetch_brightness_data = false;
+    let mut data_writer = DataWriter::create(path,3200,fetch_brightness_data).unwrap();
 
 
     loop {
