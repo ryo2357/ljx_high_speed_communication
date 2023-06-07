@@ -1,6 +1,4 @@
 //  高速データ通信、バッチ測定
-use std::sync::mpsc;
-use std::thread;
 
 use std::thread::sleep;
 use std::time::Duration;
@@ -30,7 +28,7 @@ fn main() {
     info!("LJXインターフェースの作成");
     // rxからの受信データをパース⇒保存するスレッドを建てる
     // let profile_writer = ProfileWriter::new(rx, "./output".to_string(), 3200, true);
-    let profile_writer = ProfileWriter::new(
+    let _profile_writer = ProfileWriter::new(
         rx,
         CONFIG.save_dir.clone(),
         CONFIG.ljx_profile_data_num,

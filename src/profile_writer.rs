@@ -1,14 +1,12 @@
 //  高速データ通信、バッチ測定
 use std::thread;
-use std::thread::sleep;
-use std::time::Duration;
 
 use std::sync::mpsc;
 
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
-use ljx::{LjxIf, ReceiveData};
+use ljx::ReceiveData;
 use log::info;
 use std::thread::JoinHandle;
 
@@ -29,9 +27,9 @@ impl DataWriter {
         };
 
         Ok(Self {
-            writer: writer,
-            data_num: data_num,
-            data_end: data_end,
+            writer,
+            data_num,
+            data_end,
         })
     }
 
@@ -49,6 +47,7 @@ impl DataWriter {
     }
 }
 
+#[allow(dead_code)]
 pub struct ProfileWriter {
     inner: JoinHandle<anyhow::Result<()>>,
 }
@@ -67,6 +66,7 @@ impl ProfileWriter {
         // let mut data_writer = DataWriter::create(path, 3200, fetch_brightness_data).unwrap();
         let mut data_writer = DataWriter::create(path, data_num, fetch_brightness_data).unwrap();
 
+        #[allow(unreachable_code)]
         let thread: JoinHandle<anyhow::Result<()>> = thread::spawn(move || {
             loop {
                 let receive_data = rx.recv().unwrap();
