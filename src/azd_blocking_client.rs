@@ -1,5 +1,3 @@
-// tokioランタイム内で動くサーボモータのコントローラー
-
 use std::sync::{Arc, Mutex};
 use tokio::net::UdpSocket;
 use tokio::runtime::Runtime;
@@ -76,22 +74,45 @@ impl ReceiveData {
     }
 }
 
+// 同期コードから呼び出す構造体
+// tokioランタイムと非同期コードのメソッドをラップして同期コードにしたメソッドを実装
+pub struct AzdBlockingClient {
+    // inner: AZD_Client,
+    rt: Runtime,
+}
+
+impl AzdBlockingClient {
+    pub fn connect(addr: &str) -> anyhow::Result<Self> {
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()?;
+        // addr="127.0.0.1:34254"
+        let (inner, sender) = rt.block_on(AzdUdpSocket::connect(addr))?;
+
+        Ok(Self { rt })
+    }
+
+    // pub fn revert_to_standard_position() -> anyhow::Result<()> {}
+}
+
 // tokioで実装したAzdのクライアント
-pub struct AzdClient {
+pub struct AzdAsyncClient {
     socket: AzdUdpSocket,
     state: Arc<Mutex<AzdState>>,
 }
-pub impl AzdClient {
-    pub async fn connect(addr: &str) -> anyhow::Result<Self> {
+impl AzdAsyncClient {
+    async fn connect(addr: &str) -> anyhow::Result<Self> {
         let (socket, mut receiver) = AzdUdpSocket::connect(addr).await?;
         let state: Arc<Mutex<AzdState>> = Default::default();
 
+        #[allow(unreachable_code)]
         let receive_state = state.clone();
         let _receive_handle: JoinHandle<anyhow::Result<()>> = tokio::spawn(async move {
             while let Some(buff) = receiver.recv().await {
                 let mut state_inner = receive_state.lock().unwrap();
                 state_inner.update(buff);
             }
+            Ok(())
         });
 
         Ok(Self { socket, state })

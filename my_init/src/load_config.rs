@@ -1,9 +1,9 @@
 use once_cell::sync::Lazy;
 use serde_derive::{Deserialize, Serialize};
 
-pub static CONFIG: Lazy<AppConfig> = Lazy::new(|| set_config());
+pub static CONFIG: Lazy<AppConfig> = Lazy::new(set_config);
 
-const NAME: &'static str = env!("CARGO_PKG_NAME");
+const NAME: &str = env!("CARGO_PKG_NAME");
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct AppConfig {
