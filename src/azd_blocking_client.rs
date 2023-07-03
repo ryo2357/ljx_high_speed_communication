@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 use tokio::net::UdpSocket;
 use tokio::runtime::Runtime;
-use tokio::sync::mpsc::{self, Receiver, Sender};
+use tokio::sync::mpsc::{self, Receiver};
 use tokio::task::JoinHandle;
 
 // 送受信するデータ形状の宣言
@@ -139,10 +139,10 @@ impl AzdState {
         Ok(())
     }
     fn make_revert_command(&self) -> anyhow::Result<SendBuff> {
-        Ok(([0; 40]))
+        Ok([0; 40])
     }
     fn make_start_command(&self) -> anyhow::Result<SendBuff> {
-        Ok(([0; 40]))
+        Ok([0; 40])
     }
 }
 

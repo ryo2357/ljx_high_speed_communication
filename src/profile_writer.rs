@@ -55,16 +55,16 @@ pub struct ProfileWriter {
 impl ProfileWriter {
     pub fn new(
         rx: mpsc::Receiver<ReceiveData>,
-        save_dir: String,
+        save_path: String,
         data_num: usize,
         fetch_brightness_data: bool,
     ) -> anyhow::Result<Self> {
-        let date = my_init::get_time_string();
-        let path = save_dir + "/raw_profile" + &date + ".hex";
-
+        // let date = my_init::get_time_string();
+        // let path = save_dir + "/raw_profile" + &date + ".hex";
         // let fetch_brightness_data = false;
         // let mut data_writer = DataWriter::create(path, 3200, fetch_brightness_data).unwrap();
-        let mut data_writer = DataWriter::create(path, data_num, fetch_brightness_data).unwrap();
+        let mut data_writer =
+            DataWriter::create(save_path, data_num, fetch_brightness_data).unwrap();
 
         #[allow(unreachable_code)]
         let thread: JoinHandle<anyhow::Result<()>> = thread::spawn(move || {

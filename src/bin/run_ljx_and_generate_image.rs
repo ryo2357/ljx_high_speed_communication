@@ -1,7 +1,10 @@
 //  高速データ通信、バッチ測定
 
+use dotenv::dotenv;
 use std::thread::sleep;
 use std::time::Duration;
+
+use serde::Deserialize;
 
 use ljx::LjxIf;
 use log::info;
@@ -9,66 +12,117 @@ use log::info;
 use my_init::wait_until_enter;
 use my_init::CONFIG;
 
-extern crate ljx_high_speed_communication;
+use ljx_high_speed_communication::ljx_data_converter;
+use ljx_high_speed_communication::ProfileWriter;
 
-pub use ljx_high_speed_communication::ProfileWriter;
+use ljx_data_converter::{convert_ljx_data_to_images, LjxDataConverterConfig};
 
-fn main() {
+fn main() -> anyhow::Result<()> {
     my_init::init();
     info!("logger initialized");
 
-    let (mut interface, rx) = match LjxIf::create() {
-        Ok(t) => t,
-        Err(err) => panic!(
-            "Error when ffi::LJX8IF_InitializeHighSpeedDataCommunication:{:?}",
-            err
-        ),
-    };
+    let (instrumentation_config, converter_config) = get_configs()?;
+    instrumentation_plz(instrumentation_config);
+    info!("instrumentation_completed");
 
-    info!("LJXインターフェースの作成");
-    // rxからの受信データをパース⇒保存するスレッドを建てる
-    // let profile_writer = ProfileWriter::new(rx, "./output".to_string(), 3200, true);
-    let _profile_writer = ProfileWriter::new(
-        rx,
-        CONFIG.save_dir.clone(),
-        CONFIG.ljx_profile_data_num,
-        CONFIG.ljx_fetch_brightness_data,
-    );
-    info!("Profile_Writerの作成");
+    profile_convert_images(converter_config)?;
+    Ok(())
+}
 
-    wait_until_enter();
+fn get_configs() -> anyhow::Result<(InstrumentationConfig, LjxDataConverterConfig)> {
+    dotenv().ok();
+    let mut instrumentation_config =
+        match envy::prefixed("InstrumentationConfig_").from_env::<InstrumentationConfig>() {
+            Ok(config) => config,
 
-    match interface.open_ethernet(CONFIG.ljx_ip_address, CONFIG.ljx_port) {
-        Ok(_t) => {}
-        Err(err) => panic!("{:?}", err),
+            Err(error) => panic!("{:#?}", error),
+        };
+
+    let date = my_init::get_time_string();
+    let save_path = CONFIG.save_dir.clone() + "/raw_profile" + &date + ".hex";
+    instrumentation_config.set_save_path(save_path.clone());
+
+    let mut converter_config =
+        match envy::prefixed("LjxDataConverterConfig").from_env::<LjxDataConverterConfig>() {
+            Ok(config) => config,
+
+            Err(error) => panic!("{:#?}", error),
+        };
+    converter_config.set_ljx_data_path(save_path);
+
+    Ok((instrumentation_config, converter_config))
+}
+
+use impl_instrumentation::{instrumentation_plz, InstrumentationConfig};
+mod simpl_instrumentation {
+    #[derive(Deserialize, Debug)]
+    struct InstrumentationConfig {
+        save_dir: String,
+        save_path: Option<String>,
+        ljx_profile_data_num: usize,
+        ljx_fetch_brightness_data: bool,
     }
 
-    wait_until_enter();
-    // ここでプロファイルデータを取得
-    match interface.initialize_communication(CONFIG.ljx_high_speed_port) {
-        Ok(_) => {}
-        Err(err) => panic!("{:?}", err),
+    impl InstrumentationConfig {
+        fn set_save_path(&mut self, path: String) {
+            self.save_path = Some(path);
+        }
     }
 
-    wait_until_enter();
+    fn instrumentation_plz(config: InstrumentationConfig) {
+        let (mut interface, rx) = match LjxIf::create() {
+            Ok(t) => t,
+            Err(err) => panic!(
+                "Error when ffi::LJX8IF_InitializeHighSpeedDataCommunication:{:?}",
+                err
+            ),
+        };
 
-    match interface.pre_start_communication() {
-        Ok(_) => {}
-        Err(err) => panic!("{:?}", err),
-    }
+        info!("LJXインターフェースの作成");
+        // rxからの受信データをパース⇒保存するスレッドを建てる
+        // let profile_writer = ProfileWriter::new(rx, "./output".to_string(), 3200, true);
+        let _profile_writer = ProfileWriter::new(
+            rx,
+            config.save_dir.clone(),
+            config.ljx_profile_data_num,
+            config.ljx_fetch_brightness_data,
+        );
+        info!("Profile_Writerの作成");
 
-    // wait_until_enter();
+        wait_until_enter();
 
-    match interface.start_communication() {
-        Ok(_) => {}
-        Err(err) => panic!("{:?}", err),
-    }
+        match interface.open_ethernet(CONFIG.ljx_ip_address, CONFIG.ljx_port) {
+            Ok(_t) => {}
+            Err(err) => panic!("{:?}", err),
+        }
 
-    // wait_until_enter();
-    sleep(Duration::from_millis(5000));
+        wait_until_enter();
+        // ここでプロファイルデータを取得
+        match interface.initialize_communication(CONFIG.ljx_high_speed_port) {
+            Ok(_) => {}
+            Err(err) => panic!("{:?}", err),
+        }
 
-    match interface.stop_communication() {
-        Ok(_) => {}
-        Err(err) => panic!("{:?}", err),
+        wait_until_enter();
+
+        match interface.pre_start_communication() {
+            Ok(_) => {}
+            Err(err) => panic!("{:?}", err),
+        }
+
+        // wait_until_enter();
+
+        match interface.start_communication() {
+            Ok(_) => {}
+            Err(err) => panic!("{:?}", err),
+        }
+
+        // wait_until_enter();
+        sleep(Duration::from_millis(5000));
+
+        match interface.stop_communication() {
+            Ok(_) => {}
+            Err(err) => panic!("{:?}", err),
+        }
     }
 }

@@ -25,12 +25,15 @@ fn main() {
         ),
     };
 
+    let date = my_init::get_time_string();
+    let save_path = CONFIG.save_dir.clone() + "/raw_profile" + &date + ".hex";
+
     info!("LJXインターフェースの作成");
     // rxからの受信データをパース⇒保存するスレッドを建てる
     // let profile_writer = ProfileWriter::new(rx, "./output".to_string(), 3200, true);
     let _profile_writer = ProfileWriter::new(
         rx,
-        CONFIG.save_dir.clone(),
+        save_path,
         CONFIG.ljx_profile_data_num,
         CONFIG.ljx_fetch_brightness_data,
     );
