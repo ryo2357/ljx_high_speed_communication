@@ -6,7 +6,6 @@ use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::fs;
 use std::process::Command;
 
-// TODO:命名を変更したので波及範囲を調査
 #[derive(Deserialize, Debug)]
 pub struct LjxDataConverterConfig {
     // .envから取得しないデータはOptionで

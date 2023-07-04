@@ -9,6 +9,7 @@ use serde::Deserialize;
 use ljx::LjxIf;
 use log::info;
 
+// TODO:そのうち使わないようにする
 use my_init::wait_until_enter;
 use my_init::CONFIG;
 
