@@ -17,7 +17,7 @@ fn main() {
     println!("{:#?}", config);
     println!("{:#?}", config.check_completeness());
 
-    config.set_profile_path("test".to_string());
+    config.set_ljx_data_path("test".to_string());
 
     println!("{:#?}", config);
     println!("{:#?}", config.check_completeness());
