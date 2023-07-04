@@ -1,5 +1,4 @@
 use dotenv::dotenv;
-use serde::Deserialize;
 // use std::env;
 
 use ljx_high_speed_communication::ljx_data_converter::LjxDataConverterConfig;

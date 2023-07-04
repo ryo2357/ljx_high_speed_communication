@@ -18,7 +18,7 @@ struct DataWriter {
 
 impl DataWriter {
     fn create(path: String, data_num: usize, brightness: bool) -> anyhow::Result<Self> {
-        let file = File::create(&path)?;
+        let file = File::create(path)?;
         let writer = BufWriter::new(file);
 
         let data_end = match brightness {

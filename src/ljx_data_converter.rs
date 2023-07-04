@@ -4,8 +4,7 @@ use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
 use std::fs;
-
-use crate::profile_writer;
+use std::process::Command;
 
 // TODO:命名を変更したので波及範囲を調査
 #[derive(Deserialize, Debug)]
@@ -32,6 +31,10 @@ pub struct LjxDataConverterConfig {
     pub z_upper_limit: i32,
 
     pub have_brightness: bool,
+
+    pub venv_path: String,
+    pub mesh_generate_script_path: String,
+    pub image_generate_script_path: String,
 }
 
 impl LjxDataConverterConfig {
@@ -64,6 +67,7 @@ pub fn convert_ljx_data_to_images(config: LjxDataConverterConfig) -> anyhow::Res
 
         let mesh_path = mesh_generater.make_mesh_from_ply(plz_path)?;
         let image_path = image_generater.generate_from_ply(mesh_path)?;
+        info!("{}", image_path)
     }
 
     Ok(())
@@ -86,8 +90,8 @@ struct ConverterLjxToPly {
 }
 impl ConverterLjxToPly {
     fn new(config: &LjxDataConverterConfig) -> anyhow::Result<Self> {
-        let reader = LjxDataStreamReader::new(&config)?;
-        let converter = ProfileToPly::new(&config);
+        let reader = LjxDataStreamReader::new(config)?;
+        let converter = ProfileToPly::new(config);
 
         Ok(Self {
             reader,
@@ -111,9 +115,9 @@ impl ConverterLjxToPly {
             + ".plz";
         let mut writer = PlyStreamWriter::new(&create_file_path)?;
 
-        writer.write_header();
+        writer.write_header()?;
         self.stream_convert(&mut writer)?;
-        writer.fix_header();
+        writer.fix_header()?;
 
         self.made_num += 1;
 
@@ -138,7 +142,7 @@ impl ConverterLjxToPly {
         Ok(())
     }
     fn backward(&mut self, num: usize) -> anyhow::Result<()> {
-        self.backward(num)?;
+        self.reader.backward(num)?;
         Ok(())
     }
 }
@@ -214,7 +218,7 @@ impl PlyStreamWriter {
     fn new(file_path: &str) -> anyhow::Result<Self> {
         let folder_file = std::path::Path::new(&file_path).parent().unwrap();
         fs::create_dir_all(folder_file)?;
-        let file = File::create(&file_path)?;
+        let file = File::create(file_path)?;
         let writer = BufWriter::new(file);
         Ok(Self {
             writer,
@@ -223,7 +227,7 @@ impl PlyStreamWriter {
     }
 
     fn make_header(&self) -> String {
-        let point_digits_size: usize = 20 - format!("{:}", self.point_count).to_string().len();
+        let point_digits_size: usize = 20 - format!("{:}", self.point_count).len();
         let adjust_comment = &"xxxxxxxxxxxxxxxxxxxx"[0..point_digits_size];
         let header:String = format!(
             "ply\nformat binary_little_endian 1.0\ncomment adjust str {}\nelement vertex {}\nproperty double x\nproperty double y\nproperty double z\nend_header\n",
@@ -231,10 +235,6 @@ impl PlyStreamWriter {
             self.point_count
         );
         header
-    }
-
-    fn get_point_count(&self) -> usize {
-        self.point_count
     }
 
     fn write_points(&mut self, points: Vec<ProfilePoint>) -> anyhow::Result<()> {
@@ -259,7 +259,6 @@ impl PlyStreamWriter {
     }
 
     fn fix_header(&mut self) -> anyhow::Result<()> {
-        let point_num = self.get_point_count();
         let header = self.make_header();
 
         self.writer.seek(SeekFrom::Start(0))?;
@@ -412,26 +411,55 @@ impl ParseRead for LjxBufParseNoBrightness {
 }
 
 // mesh ////////////////////////////////////////////////////////////////////
-struct MeshGenerator {}
+struct MeshGenerator {
+    venv_path: String,
+    script_path: String,
+}
 impl MeshGenerator {
     fn new(config: &LjxDataConverterConfig) -> anyhow::Result<Self> {
-        Ok(Self {})
+        Ok(Self {
+            venv_path: config.venv_path.clone(),
+            script_path: config.mesh_generate_script_path.clone(),
+        })
     }
 
     // 返り値は生成したplyファイルのパス
     fn make_mesh_from_ply(&self, input_path: String) -> anyhow::Result<String> {
-        Ok("test".to_string())
+        let output_file_path = String::new() + &input_path.replace(".ply", "_with_mesh.ply");
+
+        let _output = Command::new(&self.venv_path)
+            .arg(&self.script_path)
+            .arg(&input_path)
+            .arg(&output_file_path)
+            .output()?;
+
+        Ok(output_file_path)
     }
 }
 
-struct ImageGenerator {}
+struct ImageGenerator {
+    venv_path: String,
+    script_path: String,
+}
 impl ImageGenerator {
     fn new(config: &LjxDataConverterConfig) -> anyhow::Result<Self> {
-        Ok(Self {})
+        Ok(Self {
+            venv_path: config.venv_path.clone(),
+            script_path: config.image_generate_script_path.clone(),
+        })
     }
 
-    // 返り値は生成したplyファイルのパス
+    // 返り値は生成したjpegファイルのパス
     fn generate_from_ply(&self, input_path: String) -> anyhow::Result<String> {
-        Ok("test".to_string())
+        let output_file_path = String::new() + &input_path.replace(".ply", ".jpg");
+
+        // カメラの設定を引数にする
+        let _output = Command::new(&self.venv_path)
+            .arg(&self.script_path)
+            .arg(&input_path)
+            .arg(&output_file_path)
+            .output()?;
+
+        Ok(output_file_path)
     }
 }
