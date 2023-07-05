@@ -1,19 +1,19 @@
 use log::info;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 
 use std::fs;
 use std::process::Command;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Serialize, Debug)]
 pub struct LjxDataConverterConfig {
     // .envから取得しないデータはOptionで
     pub ljx_data_path: Option<String>,
     pub output_dir: String,
     pub output_name: String,
 
-    // ljx_data_to_pcd
+    // まだつかってない
     pub convert_quantity: usize,
 
     pub y_start_num: usize,
@@ -48,25 +48,32 @@ impl LjxDataConverterConfig {
         true
     }
 }
-
 pub fn convert_ljx_data_to_images(config: LjxDataConverterConfig) -> anyhow::Result<()> {
+    fs::create_dir_all(&config.output_dir)?;
     // 最後にinfoファイルを作る
     let mut converter = ConverterLjxToPly::new(&config)?;
     let mesh_generater = MeshGenerator::new(&config)?;
     let image_generater = ImageGenerator::new(&config)?;
+    let _info_logger = InformationLogger::new(&config)?;
+    info!("2");
 
     converter.forward(config.y_start_num)?;
+
+    // TODO:convert_quantityを反映されるコードを作る
     loop {
-        let plz_path = match converter.make_single_plz() {
+        let ply_path = match converter.make_single_ply() {
             Ok(path) => path,
             Err(_err) => break,
         };
+
+        info!("{}", ply_path);
         // 本来、シークは遅いため、オーバーラップ分はキャッシュに入れたい
         converter.backward(config.y_overlap)?;
 
-        let mesh_path = mesh_generater.make_mesh_from_ply(plz_path)?;
+        let mesh_path = mesh_generater.make_mesh_from_ply(ply_path)?;
+        info!("{}", mesh_path);
         let image_path = image_generater.generate_from_ply(mesh_path)?;
-        info!("{}", image_path)
+        info!("{}", image_path);
     }
 
     Ok(())
@@ -102,8 +109,8 @@ impl ConverterLjxToPly {
         })
     }
 
-    // 返り値は生成したplzファイルのパス
-    fn make_single_plz(&mut self) -> anyhow::Result<String> {
+    // 返り値は生成したplyファイルのパス
+    fn make_single_ply(&mut self) -> anyhow::Result<String> {
         self.converter.reset_next_y();
 
         let create_file_path = String::new()
@@ -111,7 +118,8 @@ impl ConverterLjxToPly {
             + &self.output_name
             + "_"
             + &self.made_num.to_string()
-            + ".plz";
+            + ".ply";
+        fs::create_dir_all(&self.output_dir)?;
         let mut writer = PlyStreamWriter::new(&create_file_path)?;
 
         writer.write_header()?;
@@ -215,8 +223,6 @@ struct PlyStreamWriter {
 
 impl PlyStreamWriter {
     fn new(file_path: &str) -> anyhow::Result<Self> {
-        let folder_file = std::path::Path::new(&file_path).parent().unwrap();
-        fs::create_dir_all(folder_file)?;
         let file = File::create(file_path)?;
         let writer = BufWriter::new(file);
         Ok(Self {
@@ -422,7 +428,6 @@ impl MeshGenerator {
         })
     }
 
-    // 返り値は生成したplyファイルのパス
     fn make_mesh_from_ply(&self, input_path: String) -> anyhow::Result<String> {
         let output_file_path = String::new() + &input_path.replace(".ply", "_with_mesh.ply");
 
@@ -460,5 +465,23 @@ impl ImageGenerator {
             .output()?;
 
         Ok(output_file_path)
+    }
+}
+
+struct InformationLogger {
+    file: File,
+}
+impl InformationLogger {
+    fn new(config: &LjxDataConverterConfig) -> anyhow::Result<Self> {
+        let info_file_path = String::new() + &config.output_dir + &config.output_name + "_info.txt";
+        let mut file = File::create(info_file_path)?;
+
+        // Configの書き込み
+        writeln!(file, "[LjxDataConverterConfig]")?;
+        let toml_config = toml::to_string(&config)?;
+        write!(file, "{}", toml_config)?;
+        writeln!(file)?;
+
+        Ok(Self { file })
     }
 }
