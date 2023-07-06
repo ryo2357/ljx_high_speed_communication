@@ -1,7 +1,7 @@
 use dotenv::dotenv;
 use log::info;
 
-use ljx_high_speed_communication::ljx_data_converter::{
+use ljx_high_speed_communication::converter_raw_to_image::{
     convert_ljx_data_to_images, LjxDataConverterConfig,
 };
 

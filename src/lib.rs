@@ -3,4 +3,4 @@ mod profile_writer;
 
 pub use profile_writer::ProfileWriter;
 
-pub mod ljx_data_converter;
+pub mod converter_raw_to_image;

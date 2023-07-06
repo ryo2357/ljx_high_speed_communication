@@ -1,7 +1,7 @@
 use dotenv::dotenv;
 // use std::env;
 
-use ljx_high_speed_communication::ljx_data_converter::LjxDataConverterConfig;
+use ljx_high_speed_communication::converter_raw_to_image::LjxDataConverterConfig;
 
 fn main() {
     dotenv().ok();

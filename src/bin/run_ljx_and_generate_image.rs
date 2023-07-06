@@ -13,10 +13,10 @@ use log::info;
 use my_init::wait_until_enter;
 use my_init::CONFIG;
 
-use ljx_high_speed_communication::ljx_data_converter;
+use ljx_high_speed_communication::converter_raw_to_image;
 use ljx_high_speed_communication::ProfileWriter;
 
-use ljx_data_converter::{convert_ljx_data_to_images, LjxDataConverterConfig};
+use converter_raw_to_image::{convert_ljx_data_to_images, LjxDataConverterConfig};
 
 fn main() -> anyhow::Result<()> {
     my_init::init();
