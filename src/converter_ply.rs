@@ -60,9 +60,16 @@ pub fn convert_ljx_data_to_ply(config: LjxDataConverterConfig) -> anyhow::Result
     // 最後にinfoファイルを作る
     let mut converter = ConverterLjxToPly::new(&config)?;
     let _info_logger = InformationLogger::new(&config)?;
-    info!("2");
 
     converter.forward(config.y_start_num)?;
+
+    // for i in 0..config.convert_quantity {
+    //     let ply_path = match converter.make_single_ply() {
+    //         Ok(path) => path,
+    //         Err(_err) => break,
+    //     };
+    //     info!("No.{:?} is done, {}", i, ply_path);
+    // }
 
     // TODO:convert_quantityを反映されるコードを作る
     loop {
@@ -133,6 +140,13 @@ impl ConverterLjxToPly {
     }
 
     fn stream_convert(&mut self, writer: &mut PlyStreamWriter) -> anyhow::Result<()> {
+        // デバッグ用に１プロファイル出力
+        let header = self.reader.read_header()?;
+        println!("header:{:?}", header);
+
+        // let header = self.reader.read_header()?;
+        // println!("header:{:?}", header);
+
         for _i in 0..self.profile_take_num {
             let profile = match self.reader.read_profile() {
                 Ok(profile) => profile,
@@ -172,6 +186,7 @@ impl ProfileToPly {
             z_upper_limit: config.z_upper_limit,
         }
     }
+
     fn make_points(&mut self, profile: Vec<i32>) -> Vec<ProfilePoint> {
         let mut vec = Vec::<ProfilePoint>::new();
         let mut x = 0.0;
@@ -297,6 +312,11 @@ impl LjxDataStreamReader {
         };
         Ok(Self { reader, parser })
     }
+    // デバッグ用
+    fn read_header(&mut self) -> anyhow::Result<Vec<i32>> {
+        let profile = self.parser.parse_header(&mut self.reader)?;
+        Ok(profile)
+    }
     fn read_profile(&mut self) -> anyhow::Result<Vec<i32>> {
         let profile = self.parser.parse_read(&mut self.reader)?;
         Ok(profile)
@@ -317,6 +337,8 @@ trait ParseRead {
     fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<Vec<i32>>;
     fn forward_reader(&self, reader: &mut BufReader<File>, num: usize) -> anyhow::Result<()>;
     fn backward_reader(&self, reader: &mut BufReader<File>, num: usize) -> anyhow::Result<()>;
+    // デバッグ用
+    fn parse_header(&self, reader: &mut BufReader<File>) -> anyhow::Result<Vec<i32>>;
 }
 
 struct LjxBufParseWithBrightness {
@@ -366,6 +388,21 @@ impl ParseRead for LjxBufParseWithBrightness {
         let _len = reader.seek(SeekFrom::Current(backward_num))?;
         Ok(())
     }
+
+    fn parse_header(&self, reader: &mut BufReader<File>) -> anyhow::Result<Vec<i32>> {
+        let mut buf = [0; (3200 + 3200 + 4) * 4];
+        let _len = reader.read(&mut buf)?;
+        let iter = buf.chunks(4);
+        let mut vec = Vec::<i32>::new();
+        for (i, buf) in iter.enumerate() {
+            if i == 4 {
+                break;
+            }
+            vec.push(i32::from_le_bytes(buf.try_into()?));
+            // 単位は100nmになる 0.1μm
+        }
+        Ok(vec)
+    }
 }
 
 struct LjxBufParseNoBrightness {
@@ -414,6 +451,20 @@ impl ParseRead for LjxBufParseNoBrightness {
         let backward_num: i64 = -((3200 + 4) * 4) * num as i64;
         let _len = reader.seek(SeekFrom::Current(backward_num))?;
         Ok(())
+    }
+    fn parse_header(&self, reader: &mut BufReader<File>) -> anyhow::Result<Vec<i32>> {
+        let mut buf = [0; (3200 + 4) * 4];
+        let _len = reader.read(&mut buf)?;
+        let iter = buf.chunks(4);
+        let mut vec = Vec::<i32>::new();
+        for (i, buf) in iter.enumerate() {
+            if i == 4 {
+                break;
+            }
+            vec.push(i32::from_le_bytes(buf.try_into()?));
+            // 単位は100nmになる 0.1μm
+        }
+        Ok(vec)
     }
 }
 struct InformationLogger {
