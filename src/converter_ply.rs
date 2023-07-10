@@ -63,25 +63,17 @@ pub fn convert_ljx_data_to_ply(config: LjxDataConverterConfig) -> anyhow::Result
 
     converter.forward(config.y_start_num)?;
 
-    // for i in 0..config.convert_quantity {
-    //     let ply_path = match converter.make_single_ply() {
-    //         Ok(path) => path,
-    //         Err(_err) => break,
-    //     };
-    //     info!("No.{:?} is done, {}", i, ply_path);
-    // }
-
-    // TODO:convert_quantityを反映されるコードを作る
-    loop {
-        let ply_path = match converter.make_single_ply() {
-            Ok(path) => path,
+    for i in 0..config.convert_quantity {
+        let (convert_result, ply_path) = match converter.make_single_ply() {
+            Ok((result, path)) => (result, path),
             Err(_err) => break,
         };
-
-        info!("{}", ply_path);
-        // 本来、シークは遅いため、オーバーラップ分はキャッシュに入れたい
-        // バックワードがミスってる感ある
-        // converter.backward(config.y_overlap)?;
+        info!("No.{:?} is done, {}", i, ply_path);
+        if !convert_result {
+            info!("convert_ljx_data_to_ply()のループ内でデータ末端を検知");
+            break;
+        }
+        converter.backward(config.y_overlap)?;
     }
 
     Ok(())
@@ -118,7 +110,7 @@ impl ConverterLjxToPly {
     }
 
     // 返り値は生成したplyファイルのパス
-    fn make_single_ply(&mut self) -> anyhow::Result<String> {
+    fn make_single_ply(&mut self) -> anyhow::Result<(bool, String)> {
         self.converter.reset_next_y();
 
         let create_file_path = String::new()
@@ -131,15 +123,20 @@ impl ConverterLjxToPly {
         let mut writer = PlyStreamWriter::new(&create_file_path)?;
 
         writer.write_header()?;
-        self.stream_convert(&mut writer)?;
+        let result = self.stream_convert(&mut writer)?;
         writer.fix_header()?;
 
         self.made_num += 1;
 
-        Ok(create_file_path)
+        if !result {
+            // TODO:ファイルの削除を実装
+            info!("データ末端に達したので削除 : {}", create_file_path);
+        }
+
+        Ok((result, create_file_path))
     }
 
-    fn stream_convert(&mut self, writer: &mut PlyStreamWriter) -> anyhow::Result<()> {
+    fn stream_convert(&mut self, writer: &mut PlyStreamWriter) -> anyhow::Result<bool> {
         // デバッグ用に１プロファイル出力
         let header = self.reader.read_header()?;
         println!("header:{:?}", header);
@@ -147,17 +144,19 @@ impl ConverterLjxToPly {
         // let header = self.reader.read_header()?;
         // println!("header:{:?}", header);
 
+        // ここで読み出しできない場合、エラーが発生する用にする必用がある
+        // FIXME:エラーハンドリング出来てない
         for _i in 0..self.profile_take_num {
             let profile = match self.reader.read_profile() {
                 Ok(profile) => profile,
-                Err(_) => break,
+                Err(_) => return Ok(false),
             };
             let pcd_profile = self.converter.make_points(profile);
 
             writer.write_points(pcd_profile)?;
         }
 
-        Ok(())
+        Ok(true)
     }
     fn forward(&mut self, num: usize) -> anyhow::Result<()> {
         self.reader.forward(num)?;
@@ -334,7 +333,7 @@ impl LjxDataStreamReader {
 }
 
 trait ParseRead {
-    fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<Vec<i32>>;
+    fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<(Vec<i32>)>;
     fn forward_reader(&self, reader: &mut BufReader<File>, num: usize) -> anyhow::Result<()>;
     fn backward_reader(&self, reader: &mut BufReader<File>, num: usize) -> anyhow::Result<()>;
     // デバッグ用
@@ -361,8 +360,11 @@ impl ParseRead for LjxBufParseWithBrightness {
     fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<Vec<i32>> {
         let mut buf = [0; (3200 + 3200 + 4) * 4];
 
-        let _len = reader.read(&mut buf)?;
-        // len == 0　でエラーハンドリングするべき?
+        let len = reader.read(&mut buf)?;
+        if len == 0 {
+            info!("parse_read: {:?}", len);
+            anyhow::bail!("末端に到着");
+        }
 
         let iter = buf.chunks(4).skip(4).skip(self.start).take(self.take_num);
         let mut vec = Vec::<i32>::new();
@@ -426,8 +428,11 @@ impl ParseRead for LjxBufParseNoBrightness {
         // 輝度なしの場合、[0; (3200 + 4) * 4]
         let mut buf = [0; (3200 + 4) * 4];
 
-        let _len = reader.read(&mut buf)?;
-        // len == 0　でエラーハンドリングするべき?
+        let len = reader.read(&mut buf)?;
+        if len == 0 {
+            info!("末端に到着");
+            anyhow::bail!("末端に到着");
+        }
 
         let iter = buf.chunks(4).skip(4).skip(self.start).take(self.take_num);
         let mut vec = Vec::<i32>::new();
