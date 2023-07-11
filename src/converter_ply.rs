@@ -1,5 +1,4 @@
 use log::{error, info};
-use serde::__private::ser::FlatMapSerializeStructVariantAsMapValue;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
@@ -144,7 +143,11 @@ impl ConverterLjxToPly {
 
         self.made_num += 1;
 
-        // self.logger.write(file_name);
+        self.logger.write_convert_success(
+            file_name,
+            self.first_trigger_count,
+            self.last_trigger_count,
+        )?;
 
         Ok(result)
     }
@@ -328,6 +331,7 @@ impl LjxDataStreamReader {
         Ok(Self { reader, parser })
     }
     // デバッグ用
+    #[allow(dead_code)]
     fn read_header(&mut self) -> anyhow::Result<Vec<i32>> {
         let profile = self.parser.parse_header(&mut self.reader)?;
         Ok(profile)
@@ -391,13 +395,19 @@ impl ParseRead for LjxBufParseWithBrightness {
             info!("parse_read: {:?}", len);
             return Ok(ProfileReadResult::Terminal);
         }
-
+        // info!("1");
         // デバッグ用コードを含む
         let before_len = buf.len();
-        let trigger_count = u32::from_le_bytes(buf[4..7].try_into()?);
-        let after_len = buf.len();
+        // info!("2:{:?}", before_len);
+        let trigger_buf = &buf[4..8];
 
-        if (before_len != after_len) {
+        // info!("trigger_buf:{:?}", trigger_buf);
+        let trigger_count = u32::from_le_bytes(trigger_buf.try_into()?);
+        // info!("4");
+        let after_len = buf.len();
+        // info!("4:{:?}", after_len);
+
+        if before_len != after_len {
             error!("before_len: {:?},after_ken:{:?}", before_len, after_len);
             panic!();
         }
@@ -516,6 +526,7 @@ impl ParseRead for LjxBufParseNoBrightness {
         Ok(vec)
     }
 }
+
 struct InformationLogger {
     file: File,
 }
@@ -533,5 +544,15 @@ impl InformationLogger {
         Ok(Self { file })
     }
 
-    fn write_convert_success(&mut self, trigger_array: &Vec<u32>, file_name: String) {}
+    fn write_convert_success(
+        &mut self,
+        file_name: String,
+        first: u32,
+        last: u32,
+    ) -> anyhow::Result<()> {
+        let num = last - first + 1;
+        writeln!(self.file, "[{}]", file_name)?;
+        writeln!(self.file, "{:?} profiles from {:?}", num, first)?;
+        Ok(())
+    }
 }
