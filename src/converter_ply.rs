@@ -1,4 +1,5 @@
 use log::{error, info};
+use serde::__private::ser::FlatMapSerializeStructVariantAsMapValue;
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::fs::File;
@@ -58,20 +59,22 @@ pub fn convert_ljx_data_to_ply(config: LjxDataConverterConfig) -> anyhow::Result
 
     fs::create_dir_all(output_dir)?;
     // 最後にinfoファイルを作る
-    let mut converter = ConverterLjxToPly::new(&config)?;
-    let _info_logger = InformationLogger::new(&config)?;
+    let info_logger = InformationLogger::new(&config)?;
+    let mut converter = ConverterLjxToPly::new(&config, info_logger)?;
 
     converter.forward(config.y_start_num)?;
 
     for i in 0..config.convert_quantity {
-        let (convert_result, ply_path) = match converter.make_single_ply() {
-            Ok((result, path)) => (result, path),
-            Err(_err) => break,
-        };
-        info!("No.{:?} is done, {}", i, ply_path);
-        if !convert_result {
-            info!("convert_ljx_data_to_ply()のループ内でデータ末端を検知");
-            break;
+        let result = converter.make_single_ply()?;
+
+        match result {
+            StreamConvertResult::CanContinue => {
+                info!("No.{:?} is done", i)
+            }
+            StreamConvertResult::Terminal => {
+                info!("convert_ljx_data_to_ply()のループ内でデータ末端を検知");
+                break;
+            }
         }
         converter.backward(config.y_overlap)?;
     }
@@ -93,9 +96,18 @@ struct ConverterLjxToPly {
 
     output_dir: String,
     output_name: String,
+    // infoへの追記
+    logger: InformationLogger,
+    first_trigger_count: u32,
+    last_trigger_count: u32,
+    is_first_profile: bool,
+}
+enum StreamConvertResult {
+    Terminal,
+    CanContinue,
 }
 impl ConverterLjxToPly {
-    fn new(config: &LjxDataConverterConfig) -> anyhow::Result<Self> {
+    fn new(config: &LjxDataConverterConfig, logger: InformationLogger) -> anyhow::Result<Self> {
         let reader = LjxDataStreamReader::new(config)?;
         let converter = ProfileToPly::new(config);
 
@@ -106,19 +118,23 @@ impl ConverterLjxToPly {
             profile_take_num: config.y_take_num,
             output_dir: config.output_dir.clone(),
             output_name: config.output_name.clone(),
+            logger,
+            first_trigger_count: 0,
+            last_trigger_count: 0,
+            is_first_profile: true,
         })
     }
 
     // 返り値は生成したplyファイルのパス
-    fn make_single_ply(&mut self) -> anyhow::Result<(bool, String)> {
+    fn make_single_ply(&mut self) -> anyhow::Result<StreamConvertResult> {
         self.converter.reset_next_y();
+        self.first_trigger_count = 0;
+        self.last_trigger_count = 0;
+        self.is_first_profile = true;
 
-        let create_file_path = String::new()
-            + &self.output_dir
-            + &self.output_name
-            + "_"
-            + &self.made_num.to_string()
-            + ".ply";
+        let file_name =
+            String::new() + &self.output_name + "_" + &self.made_num.to_string() + ".ply";
+        let create_file_path = String::new() + &self.output_dir + &file_name;
         fs::create_dir_all(&self.output_dir)?;
         let mut writer = PlyStreamWriter::new(&create_file_path)?;
 
@@ -128,35 +144,35 @@ impl ConverterLjxToPly {
 
         self.made_num += 1;
 
-        if !result {
-            // TODO:ファイルの削除を実装
-            info!("データ末端に達したので削除 : {}", create_file_path);
-        }
+        // self.logger.write(file_name);
 
-        Ok((result, create_file_path))
+        Ok(result)
     }
 
-    fn stream_convert(&mut self, writer: &mut PlyStreamWriter) -> anyhow::Result<bool> {
-        // デバッグ用に１プロファイル出力
-        let header = self.reader.read_header()?;
-        println!("header:{:?}", header);
-
-        // let header = self.reader.read_header()?;
-        // println!("header:{:?}", header);
-
+    fn stream_convert(
+        &mut self,
+        writer: &mut PlyStreamWriter,
+    ) -> anyhow::Result<StreamConvertResult> {
         // ここで読み出しできない場合、エラーが発生する用にする必用がある
-        // FIXME:エラーハンドリング出来てない
+
         for _i in 0..self.profile_take_num {
-            let profile = match self.reader.read_profile() {
-                Ok(profile) => profile,
-                Err(_) => return Ok(false),
+            let result = self.reader.read_profile()?;
+            let (trigger_count, profile) = match result {
+                ProfileReadResult::Terminal => return Ok(StreamConvertResult::Terminal),
+                ProfileReadResult::Data(data) => (data.trigger_count, data.row_profile),
             };
             let pcd_profile = self.converter.make_points(profile);
-
             writer.write_points(pcd_profile)?;
+
+            if self.is_first_profile {
+                self.first_trigger_count = trigger_count;
+                self.is_first_profile = false;
+            } else {
+                self.last_trigger_count = trigger_count;
+            }
         }
 
-        Ok(true)
+        Ok(StreamConvertResult::CanContinue)
     }
     fn forward(&mut self, num: usize) -> anyhow::Result<()> {
         self.reader.forward(num)?;
@@ -316,9 +332,9 @@ impl LjxDataStreamReader {
         let profile = self.parser.parse_header(&mut self.reader)?;
         Ok(profile)
     }
-    fn read_profile(&mut self) -> anyhow::Result<Vec<i32>> {
-        let profile = self.parser.parse_read(&mut self.reader)?;
-        Ok(profile)
+    fn read_profile(&mut self) -> anyhow::Result<ProfileReadResult> {
+        let result = self.parser.parse_read(&mut self.reader)?;
+        Ok(result)
     }
 
     fn forward(&mut self, num: usize) -> anyhow::Result<()> {
@@ -332,8 +348,17 @@ impl LjxDataStreamReader {
     }
 }
 
+enum ProfileReadResult {
+    Terminal,
+    Data(ProfileData),
+}
+struct ProfileData {
+    trigger_count: u32,
+    row_profile: Vec<i32>,
+}
 trait ParseRead {
-    fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<(Vec<i32>)>;
+    // トリガーカウントとプロファイルデータを返却する
+    fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<ProfileReadResult>;
     fn forward_reader(&self, reader: &mut BufReader<File>, num: usize) -> anyhow::Result<()>;
     fn backward_reader(&self, reader: &mut BufReader<File>, num: usize) -> anyhow::Result<()>;
     // デバッグ用
@@ -357,25 +382,39 @@ impl LjxBufParseWithBrightness {
     }
 }
 impl ParseRead for LjxBufParseWithBrightness {
-    fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<Vec<i32>> {
+    fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<ProfileReadResult> {
         let mut buf = [0; (3200 + 3200 + 4) * 4];
 
         let len = reader.read(&mut buf)?;
+        // 基本的にプロファイル単位で保存されているので0 or 25616 になるはず
         if len == 0 {
             info!("parse_read: {:?}", len);
-            anyhow::bail!("末端に到着");
+            return Ok(ProfileReadResult::Terminal);
+        }
+
+        // デバッグ用コードを含む
+        let before_len = buf.len();
+        let trigger_count = u32::from_le_bytes(buf[4..7].try_into()?);
+        let after_len = buf.len();
+
+        if (before_len != after_len) {
+            error!("before_len: {:?},after_ken:{:?}", before_len, after_len);
+            panic!();
         }
 
         let iter = buf.chunks(4).skip(4).skip(self.start).take(self.take_num);
-        let mut vec = Vec::<i32>::new();
+        let mut row_profile = Vec::<i32>::new();
         for (i, buf) in iter.enumerate() {
             if i == 3200 {
                 break;
             }
-            vec.push(i32::from_le_bytes(buf.try_into()?));
+            row_profile.push(i32::from_le_bytes(buf.try_into()?));
             // 単位は100nmになる 0.1μm
         }
-        Ok(vec)
+        Ok(ProfileReadResult::Data(ProfileData {
+            trigger_count,
+            row_profile,
+        }))
     }
     fn forward_reader(&self, reader: &mut BufReader<File>, num: usize) -> anyhow::Result<()> {
         let mut buf = [0; (3200 + 3200 + 4) * 4];
@@ -424,26 +463,31 @@ impl LjxBufParseNoBrightness {
     }
 }
 impl ParseRead for LjxBufParseNoBrightness {
-    fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<Vec<i32>> {
+    fn parse_read(&self, reader: &mut BufReader<File>) -> anyhow::Result<ProfileReadResult> {
         // 輝度なしの場合、[0; (3200 + 4) * 4]
         let mut buf = [0; (3200 + 4) * 4];
 
         let len = reader.read(&mut buf)?;
         if len == 0 {
             info!("末端に到着");
-            anyhow::bail!("末端に到着");
+            return Ok(ProfileReadResult::Terminal);
         }
 
+        let trigger_count = u32::from_le_bytes(buf[4..7].try_into()?);
+
         let iter = buf.chunks(4).skip(4).skip(self.start).take(self.take_num);
-        let mut vec = Vec::<i32>::new();
+        let mut row_profile = Vec::<i32>::new();
         for (i, buf) in iter.enumerate() {
             if i == 3200 {
                 break;
             }
-            vec.push(i32::from_le_bytes(buf.try_into()?));
+            row_profile.push(i32::from_le_bytes(buf.try_into()?));
             // 単位は100nmになる 0.1μm
         }
-        Ok(vec)
+        Ok(ProfileReadResult::Data(ProfileData {
+            trigger_count,
+            row_profile,
+        }))
     }
     fn forward_reader(&self, reader: &mut BufReader<File>, num: usize) -> anyhow::Result<()> {
         let mut buf = [0; (3200 + 4) * 4];
@@ -488,4 +532,6 @@ impl InformationLogger {
 
         Ok(Self { file })
     }
+
+    fn write_convert_success(&mut self, trigger_array: &Vec<u32>, file_name: String) {}
 }
